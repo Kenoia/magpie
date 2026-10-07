@@ -49,8 +49,8 @@ import (
 // So the adapter's servers go in mcp-adapter.json, and mcp.json is written
 // only for the extension, or for an adapter older than 3.
 
-// piPlugins is which of the two Pi has, from the packages its settings.json
-// lists and the folders Pi installs them in.
+// piPlugins is which MCP extensions Pi loads, from settings.json and
+// auto-discovered extensions. Package storage only tells their versions.
 type piPlugins struct {
 	adapter bool
 	major   int // pi-mcp-adapter's, 0 when not known
@@ -126,8 +126,15 @@ func piDetect(d string) piPlugins {
 	var specs []string
 	for _, r := range settings.Packages {
 		var s string
-		var o struct{ Source string }
+		var o struct {
+			Source     string
+			Extensions []string
+		}
 		if json.Unmarshal(r, &s) != nil && json.Unmarshal(r, &o) == nil {
+			// Pi's empty resource filter explicitly loads no extensions.
+			if o.Extensions != nil && len(o.Extensions) == 0 {
+				continue
+			}
 			s = o.Source
 		}
 		specs = append(specs, s)
@@ -164,11 +171,16 @@ func piDetect(d string) piPlugins {
 			}
 		}
 	}
-	if exists(filepath.Join(d, "npm", "node_modules", "pi-mcp-extension")) || exists(filepath.Join(d, "extensions", "pi-mcp-extension")) {
+	// Pi discovers extension entry points in extensions/, not npm/git
+	// package storage (package-manager.ts, addAutoDiscoveredResources).
+	if piExtensionIn(filepath.Join(d, "extensions", "pi-mcp-extension"), "pi-mcp-extension") {
 		p.ext = true
 	}
-	// Pi loads what its extensions folder has without a settings entry
-	dirs = append(dirs, filepath.Join(d, "extensions", "pi-mcp-adapter"))
+	auto := filepath.Join(d, "extensions", "pi-mcp-adapter")
+	if piExtensionIn(auto, "pi-mcp-adapter") {
+		p.adapter = true
+		dirs = append(dirs, auto)
+	}
 	dirs = append(dirs, filepath.Join(d, "npm", "node_modules", "pi-mcp-adapter"))
 	git, _ := filepath.Glob(filepath.Join(d, "git", "*", "*", "pi-mcp-adapter"))
 	dirs = append(dirs, git...)
@@ -178,17 +190,38 @@ func piDetect(d string) piPlugins {
 	found := ""
 	for _, dir := range dirs {
 		if found = version(dir); found != "" {
-			p.adapter = true
 			break
 		}
 	}
-	for _, v := range []string{pin, found} {
-		if n, err := strconv.Atoi(strings.SplitN(v, ".", 2)[0]); err == nil && n > 0 {
-			p.major = n
-			break
+	if p.adapter {
+		for _, v := range []string{pin, found} {
+			if n, err := strconv.Atoi(strings.SplitN(v, ".", 2)[0]); err == nil && n > 0 {
+				p.major = n
+				break
+			}
 		}
 	}
 	return p
+}
+
+// piExtensionIn recognizes a known package Pi discovers in extensions/:
+// an existing pi.extensions entry, or index.ts/js. A package.json alone
+// isn't an entry point (package-manager.ts, resolveExtensionEntries).
+func piExtensionIn(dir, name string) bool {
+	var pkg struct {
+		Name string
+		Pi   struct{ Extensions []string }
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "package.json"))
+	if json.Unmarshal(raw, &pkg) != nil || pkg.Name != name {
+		return false
+	}
+	for _, e := range pkg.Pi.Extensions {
+		if exists(filepath.Join(dir, e)) {
+			return true
+		}
+	}
+	return exists(filepath.Join(dir, "index.ts")) || exists(filepath.Join(dir, "index.js"))
 }
 
 // piMCP is the file Pi's MCP servers go in, and the extension Pi reads them

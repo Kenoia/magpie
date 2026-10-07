@@ -35,6 +35,7 @@ agents RTK, a CLI that cuts shell output down before the model reads it.
 - An edit never silently loses. When an agent's copy of a skill and the library both changed, the newest edit wins, and the losing one is kept with the backups.
 - A failure for one agent is a `Problem` in the result. It doesn't stop the others.
 - A server an agent can't reach is not written there, and `mcpFile.supports` says why. For example, Claude Desktop takes no remote server, and Codex, Goose, dsh, Grok and Command Code take no SSE.
+- Pi 0.99 and later use their own `mcp.json` unless an MCP extension is configured in `settings.json`, discovered with an entry point in the agent's `extensions/` folder, or `-builtin:mcp` disables built-in MCP. Installed npm, git and global package folders alone do not select an extension's file; they only identify a configured adapter's version. [`pimcp.go`](../../internal/library/pimcp.go) selects the file and backs up both files before recovering adapter servers into native MCP; conflicting servers and adapter-only settings stay available for import.
 - Removing RTK never uses `rtk init --uninstall`. That command deletes Gemini's `GEMINI.md` whole and removes Claude Code, OpenCode and Cursor together.
 - CC Switch's own skills folder is only ever read.
 
