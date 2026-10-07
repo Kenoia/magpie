@@ -3,11 +3,14 @@ package agent
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"reflect"
 	"strings"
 	"sync"
 
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/jsonc"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
 	"gopkg.in/yaml.v3"
@@ -76,20 +79,68 @@ func syncJSON(path, key string, value func() any) error {
 	return edit.SetJSON(path, edit.KV{Path: key, Value: v})
 }
 
-// syncJSONInOrder is syncJSON for a block whose keys' order the agent reads
-// (OpenCode lists a model's variants in theirs): one that says the same in
-// another order is rewritten too, as an older magpie wrote the variants
-// alphabetically (#713).
-func syncJSONInOrder(path, key string, value func() any) error {
-	cur, ok := edit.GetJSON(path, key)
-	if !ok {
+// syncProviderJSON refreshes an existing provider without adopting a config
+// magpie has never wired. Picking a model uses setProviderJSON directly.
+func syncProviderJSON(path, key, shape string, value func() any) error {
+	if _, ok := edit.GetJSON(path, key); !ok {
 		return nil
 	}
-	v := value()
-	if sameJSON(cur, v) && sameOrder(cur, v) {
+	return setProviderJSON(path, key, shape, value())
+}
+
+// setProviderJSON patches only the fields magpie owns. The model list is
+// replaced as a whole so removed models and their old settings disappear;
+// provider flags and OpenCode options written by extensions stay untouched.
+func setProviderJSON(path, key, shape string, value any) error {
+	fields := []string{"name", "models"}
+	switch shape {
+	case "pi":
+		fields = append(fields, "baseUrl", "api", "apiKey")
+	case "crush":
+		fields = append(fields, "type", "base_url", "api_key")
+	case "opencode":
+		fields = append(fields, "npm", "options.baseURL", "options.apiKey")
+	default:
+		return fmt.Errorf("unknown provider shape %q", shape)
+	}
+	raw, err := edit.Read(path)
+	if err != nil {
+		return err
+	}
+	cur := gjson.GetBytes(jsonc.ToJSON(raw), key)
+	if !cur.IsObject() {
+		return edit.SetJSON(path, edit.KV{Path: key, Value: value})
+	}
+	b, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	var set []edit.KV
+	var del []string
+	for _, field := range fields {
+		want, have := gjson.GetBytes(b, field), cur.Get(field)
+		if !want.Exists() {
+			if have.Exists() {
+				del = append(del, key+"."+field)
+			}
+			continue
+		}
+		v := json.RawMessage(want.Raw)
+		// OpenCode reads variants in their key order; older magpie lists
+		// alphabetically rather than weakest first (#713).
+		ordered := shape == "opencode" && field == "models"
+		if !sameJSON(have.Raw, v) || ordered && !sameOrder(have.Raw, v) {
+			set = append(set, edit.KV{Path: key + "." + field, Value: v})
+		}
+	}
+	if len(set) == 0 && len(del) == 0 {
 		return nil
 	}
-	return edit.SetJSON(path, edit.KV{Path: key, Value: v})
+	out, err := edit.PatchJSON(raw, set, del)
+	if err != nil {
+		return err
+	}
+	return edit.WriteAtomic(path, out)
 }
 
 // sameOrder reports whether raw JSON and what v marshals to read alike token

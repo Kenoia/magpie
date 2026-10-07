@@ -96,6 +96,12 @@ func TestOpenCodeVariantsInOrder(t *testing.T) {
 	if err := edit.SetJSON(path, edit.KV{Path: "provider.magpie", Value: block}); err != nil {
 		t.Fatal(err)
 	}
+	// Only variants' order needs refreshing; provider extensions survive it.
+	if err := edit.SetJSON(path,
+		edit.KV{Path: "provider.magpie.compat", Value: map[string]bool{"sendSessionAffinityHeaders": true}},
+		edit.KV{Path: "provider.magpie.options.timeout", Value: 12345}); err != nil {
+		t.Fatal(err)
+	}
 	b, _ = os.ReadFile(path)
 	if got := variantOrder(t, b); !slices.Equal(got, []string{"high", "low", "max", "medium", "ultra", "xhigh"}) {
 		t.Fatalf("old block: %v\n%s", got, b)
@@ -106,6 +112,12 @@ func TestOpenCodeVariantsInOrder(t *testing.T) {
 	b, _ = os.ReadFile(path)
 	if got := variantOrder(t, b); !slices.Equal(got, want) {
 		t.Fatalf("synced: %v, want %v\n%s", got, want, b)
+	}
+	if v, _ := edit.GetJSON(path, "provider.magpie.compat.sendSessionAffinityHeaders"); v != "true" {
+		t.Error("variant order refresh removed provider compat")
+	}
+	if v, _ := edit.GetJSON(path, "provider.magpie.options.timeout"); v != "12345" {
+		t.Error("variant order refresh removed another option")
 	}
 	if err := oc.Sync(); err != nil {
 		t.Fatal(err)

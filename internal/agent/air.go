@@ -123,7 +123,7 @@ func air(home, cfg string) *Agent {
 				"baseURL", gatewayV1(), "apiKey", gateway.Token)
 		},
 		Sync: func() error {
-			return syncJSONInOrder(ocPath, "provider."+magpieID, provider)
+			return syncProviderJSON(ocPath, "provider."+magpieID, "opencode", provider)
 		},
 		Fields: []Field{{
 			Key: "model", Label: "model",
@@ -144,8 +144,10 @@ func air(home, cfg string) *Agent {
 				}
 				// each key new to the file goes in at its top: last first,
 				// so a new file reads $schema, model, …, provider
+				if err := setProviderJSON(ocPath, "provider."+magpieID, "opencode", provider()); err != nil {
+					return err
+				}
 				if err := edit.SetJSON(ocPath,
-					edit.KV{Path: "provider." + magpieID, Value: provider()},
 					edit.KV{Path: "enabled_providers", Value: []string{magpieID}},
 					// titles and summaries too, as the user's own small
 					// model may be a provider left out here

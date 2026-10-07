@@ -328,9 +328,9 @@ func (c *asideConnection) connectLocked() error {
 		return fmt.Errorf("%s", detail)
 	}
 	if status == "connected" {
-		return syncJSON(c.models, "providers.magpie", c.block)
+		return syncProviderJSON(c.models, "providers.magpie", "pi", c.block)
 	}
-	return edit.SetJSON(c.models, edit.KV{Path: "providers.magpie", Value: c.block()})
+	return setProviderJSON(c.models, "providers.magpie", "pi", c.block())
 }
 
 func (c *asideConnection) sync() error {
@@ -340,7 +340,7 @@ func (c *asideConnection) sync() error {
 	if status != "connected" {
 		return nil
 	}
-	return syncJSON(c.models, "providers.magpie", c.block)
+	return syncProviderJSON(c.models, "providers.magpie", "pi", c.block)
 }
 
 func (c *asideConnection) state() NativeState {
