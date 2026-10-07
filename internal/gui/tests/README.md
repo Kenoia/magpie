@@ -30,13 +30,18 @@ a live gateway.
 Gateway page, including creation, copying, renaming, disabling, enabling,
 rotation and deletion. It verifies key-level usage overview, request filtering and
 CSV export in Chinese and English on Chromium and WebKit. The fixtures do
-not access local credentials. Gateway keys appear only while sharing is on, with one create entry point
+not access local credentials. Gateway keys are available before sharing is enabled, with one create entry point
 and confirmation before rotation/removal (Cancel and Escape send no mutation).
 Creation, renaming and confirmation focus their controls without scrolling.
 Gateway is the only key-management page;
 Settings controls sharing and shows addresses. The test checks that toggling
-sharing retains the key, and that a removed default key is recreated as
-Magpie and appears in Gateway without a reload.
+sharing retains existing keys and does not replace a removed key.
+
+`lan-sharing-keys.test.cjs` checks the empty and all-disabled cases: enabling
+sharing is refused with a translated prompt and a link to Gateway keys,
+creation happens only through Create, and repeated sharing preserves the
+key. It runs at a narrow width in English, Chinese, Japanese and German
+on Chromium and WebKit, using isolated fixtures.
 
 `gateway-connect-keys.test.cjs` selects loopback and LAN addresses and enabled
 caller keys for Shell, curl, Python and Node examples across all four APIs.

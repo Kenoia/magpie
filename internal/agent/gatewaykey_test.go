@@ -48,6 +48,9 @@ func TestGatewayKeyBeyondLoopback(t *testing.T) {
 	}
 
 	want(wsl, gateway.Token) // nothing shared: nothing else to give
+	if _, err := access.Update("add-key", access.Change{Name: "WSL client"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := access.ConfigureLAN(true, false); err != nil {
 		t.Fatal(err)
 	}

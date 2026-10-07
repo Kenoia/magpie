@@ -15,7 +15,7 @@ import (
 
 func TestGatewayKeysBackupRoundTrip(t *testing.T) {
 	home(t)
-	if err := access.ConfigureLAN(true, false); err != nil {
+	if err := shareLegacyGateway(t); err != nil {
 		t.Fatal(err)
 	}
 	defaultKey := settings.Load()
@@ -73,7 +73,7 @@ func TestGatewayKeysBackupRoundTrip(t *testing.T) {
 
 func TestGatewayKeysWithoutSecretsOrSettingsRestore(t *testing.T) {
 	home(t)
-	if err := access.ConfigureLAN(true, false); err != nil {
+	if err := shareLegacyGateway(t); err != nil {
 		t.Fatal(err)
 	}
 	secret := settings.Load().LANKey
@@ -90,7 +90,7 @@ func TestGatewayKeysWithoutSecretsOrSettingsRestore(t *testing.T) {
 		t.Fatal("--no-keys backup contains a gateway credential")
 	}
 	home(t)
-	if err := access.ConfigureLAN(true, false); err != nil {
+	if err := shareLegacyGateway(t); err != nil {
 		t.Fatal(err)
 	}
 	current := settings.Load()
@@ -121,7 +121,7 @@ func TestOlderBackupRecoversLegacyGatewayCredential(t *testing.T) {
 
 func TestOlderBackupKeepsExistingGatewayKeyStore(t *testing.T) {
 	home(t)
-	if err := access.ConfigureLAN(true, false); err != nil {
+	if err := shareLegacyGateway(t); err != nil {
 		t.Fatal(err)
 	}
 	cur := settings.Load()
@@ -160,7 +160,7 @@ func TestGatewayKeyRestoreFailureKeepsSettingsAndKeys(t *testing.T) {
 	for _, failure := range []string{"invalid-settings", "readonly-settings", "readonly-store"} {
 		t.Run(failure, func(t *testing.T) {
 			home(t)
-			if err := access.ConfigureLAN(true, false); err != nil {
+			if err := shareLegacyGateway(t); err != nil {
 				t.Fatal(err)
 			}
 			cur := settings.Load()
@@ -210,4 +210,19 @@ func TestGatewayKeyRestoreFailureKeepsSettingsAndKeys(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A legacy sharing fixture is created explicitly; the switch issues no key.
+func shareLegacyGateway(t *testing.T) error {
+	t.Helper()
+	secret, err := access.Update("add-key", access.Change{Name: "Magpie"})
+	if err != nil {
+		return err
+	}
+	s := settings.Load()
+	s.LANKey = secret
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	return access.ConfigureLAN(true, false)
 }

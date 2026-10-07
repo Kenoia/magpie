@@ -13,6 +13,9 @@ func TestDefaultKeyRevocationSurvivesDowngrade(t *testing.T) {
 	for _, action := range []string{"off-key", "remove-key"} {
 		t.Run(action, func(t *testing.T) {
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			if err := settings.Save(settings.Settings{LANKey: Prefix + "fixture-legacy"}); err != nil {
+				t.Fatal(err)
+			}
 			if err := ConfigureLAN(true, false); err != nil {
 				t.Fatal(err)
 			}
@@ -88,6 +91,9 @@ func TestReadOnlyDefaultKeyMutationExplainsLegacyMirror(t *testing.T) {
 	for _, action := range []string{"rotate-key", "off-key", "remove-key"} {
 		t.Run(action, func(t *testing.T) {
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			if err := settings.Save(settings.Settings{LANKey: Prefix + "fixture-legacy"}); err != nil {
+				t.Fatal(err)
+			}
 			if err := ConfigureLAN(true, false); err != nil {
 				t.Fatal(err)
 			}

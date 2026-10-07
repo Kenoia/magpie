@@ -5126,8 +5126,7 @@ function renderGatewayView() {
   page.classList.remove("loading");
   page.removeAttribute("aria-busy");
   renderGateway();
-  $("#gatewayKeysBlock").hidden = !providers.gateway.lan;
-  if (!providers.gateway.lan) gatewayKeyDraft = null;
+  $("#gatewayKeysBlock").hidden = false;
   if (gatewayKeyDraft === null && gatewayLimit === null && !$("#gatewayKeys .rename-in")) renderGatewayKeys();
   renderConnect();
   renderGatewayModels();
@@ -19202,8 +19201,10 @@ function renderLAN(s) {
   };
   const set = (body) => writingPrefs(api("settings/lan", body)).then((ns) => { prefs = ns; renderSettings(); })
     .catch((e) => { status(t(e.message), "err"); renderSettings(); });
+  const keys = el("button", "text", t("Gateway keys"));
+  keys.onclick = () => show("gateway");
   row(t("Share on local network"), t("Agents on other computers on this network can use magpie’s models with a gateway key from Gateway"), "",
-    segs([["off", t("Off")], ["on", t("On")]], s.lan ? "on" : "off", (v) => set({ on: v === "on" })));
+    segs([["off", t("Off")], ["on", t("On")]], s.lan ? "on" : "off", (v) => set({ on: v === "on" })), keys);
   if (!s.lan) return;
   let urls = s.lanURLs || [], sub = "";
   // in a container magpie finds only the container's own addresses; the

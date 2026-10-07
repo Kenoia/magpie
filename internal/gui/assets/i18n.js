@@ -4,6 +4,7 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network": "在局域网共享前，请先在网关 → 网关密钥中创建一个已启用的密钥",
     "No installed fonts found": "未找到已安装字体",
     "Interface font": "界面字体",
     "Code font": "代码字体",
@@ -3613,6 +3614,7 @@ const I18N = {
     "credits": "积分",
   },
   ja: {
+    "Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network": "ローカルネットワークで共有する前に、ゲートウェイ → ゲートウェイキーで有効なキーを作成してください",
     "No installed fonts found": "インストール済みフォントが見つかりません",
     "Interface font": "インターフェースのフォント",
     "Code font": "コードのフォント",
@@ -7207,6 +7209,7 @@ const I18N = {
     "Main navigation": "メインナビゲーション",
   },
   de: {
+    "Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network": "Erstelle vor der Freigabe im lokalen Netzwerk einen aktivierten Zugangsschlüssel unter Zugangspunkt → Zugangsschlüssel",
     "No installed fonts found": "Keine installierten Schriften gefunden",
     "Interface font": "Oberflächenschrift",
     "Code font": "Codeschrift",

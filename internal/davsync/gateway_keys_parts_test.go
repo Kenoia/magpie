@@ -239,7 +239,7 @@ func TestGatewayKeysExcluded(t *testing.T) {
 				return n
 			}
 			use(a)
-			if err := access.ConfigureLAN(true, false); err != nil {
+			if err := shareLegacyGateway(t); err != nil {
 				t.Fatal(err)
 			}
 			original := settings.Load()

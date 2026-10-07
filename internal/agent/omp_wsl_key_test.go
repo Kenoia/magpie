@@ -28,6 +28,9 @@ func TestOmpKeyBeyondLoopback(t *testing.T) {
 	if e := ompProviderAt(wsl, "18.4.8"); e.Auth != "none" || e.APIKey != "" {
 		t.Fatalf("not shared, yet auth %q key %q", e.Auth, e.APIKey)
 	}
+	if _, err := access.Update("add-key", access.Change{Name: "WSL client"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := access.ConfigureLAN(true, false); err != nil {
 		t.Fatal(err)
 	}
