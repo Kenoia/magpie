@@ -34,17 +34,21 @@ three.
 Gateway → Gateway keys is available before sharing is enabled, with the
 same entry linked from Settings → Network. `POST /api/settings/lan` calls
 [`access.ConfigureLAN`](../../internal/access/access.go): sharing changes
-remote access, never creates, rotates or re-enables a gateway key. Enabling
-requires an enabled key with a nonempty credential; otherwise the request
-fails with a prompt to create one and leaves the sharing setting unchanged.
+remote access and preserves existing gateway keys. Enabling with a completely
+empty key store creates its first default key with a fresh credential and ID.
+If any records exist, enabling requires an enabled key with a nonempty
+credential; otherwise the request fails with guidance beside the sharing
+control and leaves the sharing setting unchanged. The switch never rotates
+or re-enables a key.
 The older `newKey` request field no longer rotates a credential; explicit
 rotation remains in Gateway's key management.
 
 `MigrateLegacyLANKey` still imports an older Settings credential, keeping its
 identity and old clients' access. A completed migration or revoked mirror
-is never reset by the sharing switch, so removed and disabled credentials
-stay revoked. `LANSecret` only reads an enabled key for an agent beyond
-loopback, preferring the migrated LAN key and otherwise another existing
+does not resurrect a retained credential: if an empty store gets a new default
+key, its legacy mirror is replaced with the new credential. Removed and
+disabled credentials stay revoked. `LANSecret` only reads an enabled key for an
+agent beyond loopback, preferring the migrated LAN key and otherwise another existing
 key; it does not make a default credential or change the store.
 
 Sharing still requires remote and forwarded callers to authenticate with

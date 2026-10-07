@@ -35,12 +35,16 @@ and confirmation before rotation/removal (Cancel and Escape send no mutation).
 Creation, renaming and confirmation focus their controls without scrolling.
 Gateway is the only key-management page;
 Settings controls sharing and shows addresses. The test checks that toggling
-sharing retains existing keys and does not replace a removed key.
+sharing retains existing keys and does not replace a removed key while
+another enabled key remains.
 
 `lan-sharing-keys.test.cjs` checks the empty and all-disabled cases: enabling
-sharing is refused with a translated prompt and a link to Gateway keys,
-creation happens only through Create, and repeated sharing preserves the
-key. It runs at a narrow width in English, Chinese, Japanese and German
+sharing creates the first key only when the list is empty, while an existing
+disabled key stays disabled and gets translated guidance beside the sharing
+control. Repeated sharing preserves the key, and Create can add another.
+The empty key list uses the app's padded, muted empty state; a successful
+sharing change clears its guidance, and other request failures keep their
+error feedback. It runs at narrow widths in English, Chinese, Japanese and German
 on Chromium and WebKit, using isolated fixtures.
 
 `gateway-connect-keys.test.cjs` selects loopback and LAN addresses and enabled

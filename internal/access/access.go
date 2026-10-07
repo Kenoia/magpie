@@ -442,9 +442,9 @@ func migrateLegacyLANKey() error {
 	return settings.Save(s)
 }
 
-// ConfigureLAN changes remote access without creating or changing gateway
-// keys. The second argument is retained for older callers; rotation belongs
-// to Update("rotate-key"), not the sharing switch.
+// ConfigureLAN changes remote access, creating the default key only when
+// the store is empty. The second argument is retained for older callers;
+// rotation belongs to Update("rotate-key"), not the sharing switch.
 func ConfigureLAN(on, _ bool) error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -457,7 +457,23 @@ func ConfigureLAN(on, _ bool) error {
 		if err != nil {
 			return err
 		}
-		if !slices.ContainsFunc(keys, func(k Key) bool { return !k.Off && k.Secret != "" }) {
+		if len(keys) == 0 {
+			token, err := random(24)
+			if err != nil {
+				return err
+			}
+			id, err := random(12)
+			if err != nil {
+				return err
+			}
+			keys = append(keys, Key{ID: id, Name: "Magpie", LAN: true, Secret: Prefix + token})
+			if err := save(keys); err != nil {
+				return err
+			}
+			if err := setLegacyMirror(&s, keys[0]); err != nil {
+				return err
+			}
+		} else if !slices.ContainsFunc(keys, func(k Key) bool { return !k.Off && k.Secret != "" }) {
 			return errors.New("Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network")
 		}
 	}

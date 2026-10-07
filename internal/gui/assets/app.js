@@ -19183,7 +19183,7 @@ function renderCORS(s) {
 
 // renderLAN: the gateway shared on the local network, for agents on other
 // machines. Gateway keys and connection examples live together in Gateway.
-let lanSelectedURL = "", lanProtocol = "openai";
+let lanSelectedURL = "", lanProtocol = "openai", lanKeyError = false;
 function renderLAN(s) {
   const box = $("#lanList");
   box.replaceChildren();
@@ -19199,12 +19199,21 @@ function renderLAN(s) {
     box.append(r);
     return r;
   };
-  const set = (body) => writingPrefs(api("settings/lan", body)).then((ns) => { prefs = ns; renderSettings(); })
-    .catch((e) => { status(t(e.message), "err"); renderSettings(); });
+  const set = (body) => writingPrefs(api("settings/lan", body)).then((ns) => { prefs = ns; lanKeyError = false; renderSettings(); })
+    .catch((e) => {
+      lanKeyError = e.message === "Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network";
+      if (!lanKeyError) status(t(e.message), "err");
+      renderSettings();
+    });
   const keys = el("button", "text", t("Gateway keys"));
   keys.onclick = () => show("gateway");
-  row(t("Share on local network"), t("Agents on other computers on this network can use magpie’s models with a gateway key from Gateway"), "",
+  const share = row(t("Share on local network"), t(lanKeyError ? "Create or enable a gateway key before sharing"
+    : "Agents on other computers on this network can use magpie’s models with a gateway key from Gateway"), "",
     segs([["off", t("Off")], ["on", t("On")]], s.lan ? "on" : "off", (v) => set({ on: v === "on" })), keys);
+  if (lanKeyError) {
+    share.querySelector(".sub").classList.add("err");
+    share.querySelector(".sub").setAttribute("role", "alert");
+  }
   if (!s.lan) return;
   let urls = s.lanURLs || [], sub = "";
   // in a container magpie finds only the container's own addresses; the

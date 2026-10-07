@@ -22,7 +22,7 @@ func TestLANSettingSharesCallerKeyStore(t *testing.T) {
 		handler.ServeHTTP(w, httptest.NewRequest(http.MethodPost, path, strings.NewReader(body)))
 		return w
 	}
-	for _, keys := range [][]access.Key{nil, {{ID: "disabled", Name: "Disabled", Off: true, Secret: access.Prefix + "fixture-disabled"}}} {
+	for _, keys := range [][]access.Key{{{ID: "disabled", Name: "Disabled", Off: true, Secret: access.Prefix + "fixture-disabled"}}, {{ID: "empty", Name: "Empty"}}} {
 		if err := access.Restore(keys); err != nil {
 			t.Fatal(err)
 		}
@@ -58,6 +58,39 @@ func TestLANSettingSharesCallerKeyStore(t *testing.T) {
 	post("/api/settings", `{"theme":"dark"}`)
 	if settings.Load().LANKeyID != "" || settings.Load().LANKey != "" {
 		t.Fatal("sharing assigned a default credential")
+	}
+}
+
+func TestLANSettingCreatesOnlyFirstEmptyKey(t *testing.T) {
+	sandboxHome(t)
+	handler := Handler(nil, nil)
+	var created []access.Key
+	for _, on := range []bool{false, true, true, false, true} {
+		body := `{"on":false,"newKey":true}`
+		if on {
+			body = `{"on":true,"newKey":true}`
+		}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/settings/lan", strings.NewReader(body)))
+		if w.Code != http.StatusOK || settings.Load().LAN != on {
+			t.Fatal("sharing failed for an empty or previously created store", w.Code, w.Body)
+		}
+		got, err := access.Export()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if created == nil && on {
+			created = got
+			if len(created) != 1 {
+				t.Fatal("enabling sharing did not create exactly one key")
+			}
+		}
+		if created == nil && len(got) != 0 || created != nil && !reflect.DeepEqual(got, created) {
+			t.Fatal("sharing off or repeated sharing changed gateway keys")
+		}
+		if len(got) != 0 && (strings.Contains(w.Body.String(), got[0].Secret) || strings.Contains(w.Body.String(), `"lanKey"`)) {
+			t.Fatal("sharing exposed a gateway credential")
+		}
 	}
 }
 

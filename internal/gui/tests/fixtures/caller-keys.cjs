@@ -67,6 +67,11 @@ function fixture(lang, theme, events, options = {}) {
     if (url.pathname === "/api/settings/lan") {
       const body = req.postDataJSON();
       events.push({ action: "lan", body });
+      if (body.on && !keys.length) {
+        const id = "lan-key-" + (++serial);
+        secrets.set(id, "fixture-first-lan-" + serial);
+        keys.push({ id, name: "Magpie", masked: "sk-magpie-key-…first", lan: true });
+      }
       if (body.on && !keys.some((k) => !k.off)) return route.fulfill({ status: 400,
         json: { error: "Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network" } });
       lan = body.on;

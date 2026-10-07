@@ -95,7 +95,8 @@ type Settings struct {
 	// MAGPIE_ADDR, where it is set, comes first (GatewayAddr).
 	Port int `json:"port,omitempty"`
 	// LANKeyID remembers the legacy/default key, even after removal, so its
-	// retained credential cannot be migrated again. Sharing creates no key.
+	// retained credential cannot be migrated again. Sharing creates a fresh
+	// default key only when the caller-key store is empty.
 	LANKeyID string `json:"lanKeyId,omitempty"`
 	// RequestArchive keeps each call the gateway serves — its headers and
 	// bodies both ways, secrets taken out — in the S3 bucket sync keeps
