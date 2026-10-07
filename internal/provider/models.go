@@ -724,11 +724,11 @@ func (p Provider) Exposed() []catalog.Model {
 				// not the none effortsOf takes a vendor's word for: the
 				// vendor's list doesn't have it, so it gave no word (#597)
 				m := catalog.Model{ID: id, Name: id, Provider: p.firstCatalog(), Efforts: p.knownElsewhere(id)}
-				if !p.IsAzure() {
-					m = catalog.Named([]catalog.Model{m})[0]
-				}
 				out = append(out, m)
 			}
+		}
+		if !p.IsAzure() {
+			out = catalog.Named(out)
 		}
 		return out
 	}

@@ -39,6 +39,15 @@ keys and accounts per request is in [Gateway routing and fallback](gateway-routi
 3. **Sign.** For each try, `Sign` gives the request its auth. A token about to expire is refreshed first, and the rotated tokens go back to their one holder: the agent's store, or `logins.json` for an account standing behind it.
 4. **Allowance.** Usage endpoints are rate limited, so `SubscriptionUsage` caches its results: a cached copy comes back at once and a stale one is refreshed in the background. When an account's windows start again, `OnRenewed` tells the gateway so a resting account can come back. A key's reading that finds a window it was full in (at `SpentShareOf` its routing) full no more, or full till sooner, tells it too, as agent `""` and the key's `KeyAllowanceID`, so a key out of its limit is back once the limit is raised or its usage reset; a first reading, a failed one, or one that finds it fuller tells nothing.
 
+A provider's fetched model list keeps the upstream ids and order. Display
+names prefer `magpie_label`, then `display_name`, then `name`, then the id
+([`live.go`](../../internal/catalog/live.go), `fetchOne`). `Decorate` and
+[`Named`](../../internal/catalog/catalog.go) fill missing names from the
+catalog, keeping an id when a suggested name would collide with another
+model in the list. Names supplied by the provider stay as supplied. Models
+picked by the user that the upstream does not list are named together with
+its listed models ([`Exposed`](../../internal/provider/models.go)).
+
 ## Constraints and failure behavior
 
 - Each refresh token has exactly one holder. Vendors rotate tokens on refresh, so two copies of one token would sign each other out. `savedTokenMu` stops two requests refreshing one saved account at once.

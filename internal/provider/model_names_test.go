@@ -3,6 +3,7 @@ package provider
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -85,5 +86,54 @@ func TestModelNamedAsElsewhere(t *testing.T) {
 	}
 	if ms := a.Exposed(); len(ms) != 1 || ms[0].Name != "gpt-x" {
 		t.Errorf("an Azure deployment was renamed: %+v", ms)
+	}
+}
+
+// Unlisted picks are named together, so each fallback sees its neighbors.
+func TestPickedNamesAvoidCollisions(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	if err := os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(catalog.CachePath(), []byte(`{"vendor":{"models":{
+	  "flash":{"id":"flash","name":"Flash"},
+	  "fast":{"id":"fast","name":"Flash"},
+	  "other":{"id":"other","name":"Other"}
+	}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	for _, c := range []struct {
+		name, preset string
+		live         []catalog.Model
+		want         []string
+	}{
+		{"unlisted", "", nil, []string{"flash|flash", "fast|fast", "other|Other"}},
+		{"listed name", "", []catalog.Model{{ID: "flash", Name: "Flash"}}, []string{"flash|Flash", "fast|fast", "other|Other"}},
+		{"Azure", AzurePreset, nil, []string{"flash|flash", "fast|fast", "other|other"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p := Provider{ID: "name-picks", Preset: c.preset, Models: []string{"flash", "fast", "other"}}
+			if err := catalog.SaveLive(p.ID, "", c.live); err != nil {
+				t.Fatal(err)
+			}
+			for _, reverse := range []bool{false, true} {
+				want := slices.Clone(c.want)
+				if reverse {
+					slices.Reverse(p.Models)
+					slices.Reverse(want)
+				}
+				var got []string
+				for _, m := range p.Exposed() {
+					got = append(got, m.ID+"|"+m.Name)
+				}
+				if strings.Join(got, "\n") != strings.Join(want, "\n") {
+					t.Errorf("got %v, want %v", got, want)
+				}
+			}
+		})
 	}
 }

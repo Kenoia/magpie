@@ -129,3 +129,66 @@ func TestFetchAtVersionedBase(t *testing.T) {
 		}
 	}
 }
+
+// Command Code supplies distinct names for its Flash and Flash Fast models.
+func TestFetchCommandCodeNames(t *testing.T) {
+	writeCatalog(t, `{
+	  "coralbricks":{"models":{
+	    "deepseek-v4.1-flash":{"id":"deepseek-v4.1-flash","name":"DeepSeek V4.1 Flash"},
+	    "deepseek-v4.1-flash-fast":{"id":"deepseek-v4.1-flash-fast","name":"DeepSeek V4.1 Flash"}}},
+	  "vercel":{"models":{
+	    "deepseek-v4.1-flash-fast":{"id":"deepseek-v4.1-flash-fast","name":"DeepSeek V4.1 Flash Fast"}}}
+	}`)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"object":"list","data":[
+		  {"id":"deepseek/deepseek-v4.1-flash","object":"model","created":1791381046,"owned_by":"command-code","name":"DeepSeek V4.1 Flash","context_length":1000000,"supported_endpoints":["/chat/completions","/responses"]},
+		  {"id":"deepseek/deepseek-v4.1-flash-fast","object":"model","created":1791381046,"owned_by":"command-code","name":"DeepSeek V4.1 Flash Fast","context_length":1000000,"supported_endpoints":["/chat/completions","/responses"]}]}`))
+	}))
+	defer srv.Close()
+	ms, err := Fetch(context.Background(), srv.URL+"/v1", "", false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ms) != 2 {
+		t.Fatalf("models: %+v", ms)
+	}
+	for i, m := range Named(Decorate(ms, Provider("coralbricks"))) {
+		wantID, wantName := "deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash"
+		if i == 1 {
+			wantID += "-fast"
+			wantName += " Fast"
+		}
+		if m.ID != wantID || m.Name != wantName {
+			t.Errorf("model %d: id %q, name %q; want %q, %q", i, m.ID, m.Name, wantID, wantName)
+		}
+		if m.Context != 1000000 || strings.Join(m.APIs, ",") != "chat,responses" {
+			t.Errorf("model facts lost: %+v", m)
+		}
+	}
+}
+
+func TestFetchNamePrecedence(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"models":[
+		  {"id":"all","magpie_label":"label","display_name":"display","name":"name"},
+		  {"id":"display","magpie_label":"","display_name":"display name","name":"name"},
+		  {"id":"name","display_name":"","name":"provider name"},
+		  {"id":"id","name":""},
+		  {"name":"name-only"},
+		  {"display_name":"no identifier"},
+		  {}]}`))
+	}))
+	defer srv.Close()
+	ms, err := Fetch(context.Background(), srv.URL+"/v1", "", false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, m := range ms {
+		got = append(got, m.ID+"|"+m.Name)
+	}
+	want := "all|label\ndisplay|display name\nname|provider name\nid|id\nname-only|name-only"
+	if strings.Join(got, "\n") != want {
+		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), want)
+	}
+}
