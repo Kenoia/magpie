@@ -246,7 +246,7 @@ func TestLANSecretPreservesLegacyAccessWithoutRevivingDisabledKeys(t *testing.T)
 	}{
 		{"before-migration", nil, legacy},
 		{"known-disabled", []Key{{ID: "other", Name: "Old client", Secret: legacy, Off: true}}, ""},
-		{"enabled-alternative", []Key{{ID: "other", Name: "Old client", Secret: legacy, Off: true}, {ID: "remote", Name: "Remote laptop", Secret: Prefix + "fixture-remote"}}, Prefix + "fixture-remote"},
+		{"enabled-alternative", []Key{{ID: "other", Name: "Old client", Secret: legacy, Off: true}, {ID: "remote", Name: "Remote laptop", Secret: Prefix + "fixture-remote", Models: []string{"relay/*"}}}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -260,7 +260,7 @@ func TestLANSecretPreservesLegacyAccessWithoutRevivingDisabledKeys(t *testing.T)
 			}
 			before, _ := os.ReadFile(Path())
 			if got := LANSecret(); got != tc.want {
-				t.Fatal("LAN client did not receive an enabled credential")
+				t.Fatalf("LAN credential = %q, want %q; never borrow a user key", got, tc.want)
 			}
 			if tc.want != "" {
 				if _, ok := Authenticate(tc.want); !ok {

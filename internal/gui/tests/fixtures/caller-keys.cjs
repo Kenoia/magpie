@@ -73,7 +73,7 @@ function fixture(lang, theme, events, options = {}) {
         keys.push({ id, name: "Magpie", masked: "sk-magpie-key-…first", lan: true });
       }
       if (body.on && !keys.some((k) => !k.off)) return route.fulfill({ status: 400,
-        json: { error: "Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network" } });
+        json: { code: "lan_key_required", error: options.lanKeyError || "Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network" } });
       lan = body.on;
       return json(lanState());
     }

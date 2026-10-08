@@ -86,6 +86,7 @@ async function api(path, body, heads) {
   }
   if (!res.ok) {
     const err = new Error(data?.error || `${res.status} ${res.statusText}`);
+    if (data?.code === "lan_key_required") err.code = data.code;
     if (data?.code === "runtime_unavailable") {
       err.code = data.code;
       if (data.offline === "stage" || data.offline === "disconnect") err.offline = data.offline;
@@ -5153,7 +5154,8 @@ function renderGatewayView() {
   page.classList.remove("loading");
   page.removeAttribute("aria-busy");
   renderGateway();
-  $("#gatewayKeysBlock").hidden = false;
+  $("#gatewayKeysBlock").hidden = !providers.gateway.lan;
+  if (!providers.gateway.lan) gatewayKeyDraft = null;
   if (gatewayKeyDraft === null && gatewayLimit === null && !$("#gatewayKeys .rename-in")) renderGatewayKeys();
   renderConnect();
   renderGatewayModels();
@@ -17459,6 +17461,7 @@ async function loadSettings() {
   const s = await api("settings");
   if (!prefsSettled(since) && prefs) return; // the save draws the page when it's in
   prefs = s;
+  lanKeyError = false;
   // the WebDAV setup can have been changed from outside the window (magpie
   // webdav at the terminal): the page's copy of it is dropped, so the page
   // is drawn from a fresh read. Coming back to the window is safe with a
@@ -19316,17 +19319,24 @@ function renderLAN(s) {
     box.append(r);
     return r;
   };
-  const set = (body) => writingPrefs(api("settings/lan", body)).then((ns) => { prefs = ns; lanKeyError = false; renderSettings(); })
-    .catch((e) => {
-      lanKeyError = e.message === "Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network";
-      if (!lanKeyError) status(t(e.message), "err");
-      renderSettings();
-    });
+  const set = (body) => {
+    if (lanKeyError) {
+      lanKeyError = false;
+      share.querySelector(".sub").replaceWith(el("div", "sub", t("Agents on other computers on this network can use magpie’s models with a gateway key from Gateway")));
+    }
+    return writingPrefs(api("settings/lan", body)).then((ns) => { prefs = ns; lanKeyError = false; renderSettings(); })
+      .catch((e) => {
+        lanKeyError = e.code === "lan_key_required";
+        if (!lanKeyError) status(t(e.message), "err");
+        renderSettings();
+      });
+  };
   const keys = el("button", "text", t("Gateway keys"));
   keys.onclick = () => show("gateway");
   const share = row(t("Share on local network"), t(lanKeyError ? "Create or enable a gateway key before sharing"
     : "Agents on other computers on this network can use magpie’s models with a gateway key from Gateway"), "",
-    segs([["off", t("Off")], ["on", t("On")]], s.lan ? "on" : "off", (v) => set({ on: v === "on" })), keys);
+    segs([["off", t("Off")], ["on", t("On")]], s.lan ? "on" : "off", (v) => set({ on: v === "on" })));
+  if (s.lan) share.querySelector(".val").append(keys);
   if (lanKeyError) {
     share.querySelector(".sub").classList.add("err");
     share.querySelector(".sub").setAttribute("role", "alert");

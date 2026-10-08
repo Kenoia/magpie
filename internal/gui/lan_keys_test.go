@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -27,7 +28,11 @@ func TestLANSettingSharesCallerKeyStore(t *testing.T) {
 			t.Fatal(err)
 		}
 		w := post("/api/settings/lan", `{"on":true}`)
-		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "Create an enabled gateway key") || settings.Load().LAN {
+		var out map[string]string
+		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		if w.Code != http.StatusBadRequest || out["code"] != "lan_key_required" || out["error"] == "" || settings.Load().LAN {
 			t.Fatal("sharing without an enabled key must stay off and offer creation", w.Code, w.Body)
 		}
 	}

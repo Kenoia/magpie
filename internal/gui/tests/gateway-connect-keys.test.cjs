@@ -27,7 +27,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.goto("http://magpie.test/?view=gateway");
       await snippet.waitFor();
       assert.equal(await page.locator("#connectAddress").count(), 0, "no LAN addresses before sharing is on");
-      assert.equal(await page.locator("#gatewayKeysBlock").isVisible(), true, "keys can be created before sharing");
+      assert.equal(await page.locator("#gatewayKeysBlock").isVisible(), false, "most users never share");
       assert.equal(await page.locator("#connectKey").count(), 0, "local-only users see no gateway key picker");
       assert.equal(await page.locator("#connect").getByText(locale === "zh" ? "API 密钥" : "API key", { exact: true }).count(), 1);
       await expectSecret('OPENAI_API_KEY=magpie');
@@ -175,7 +175,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#lanList .lan-address-row").waitFor({ state: "detached" });
       await page.locator("#nav").getByRole("button", { name: w.gateway, exact: true }).click();
       await page.locator("#connectAddress").waitFor({ state: "detached" });
-      assert.equal(await page.locator("#gatewayKeysBlock").isVisible(), true);
+      assert.equal(await page.locator("#gatewayKeysBlock").isVisible(), false);
       assert.equal(await page.locator("#connectKey").count(), 0);
       assert.equal(await page.locator("#connect").getByText(locale === "zh" ? "API 密钥" : "API key", { exact: true }).count(), 1);
       assert((await snippet.textContent()).includes("http://127.0.0.1:3999"));

@@ -278,9 +278,6 @@ func TestCallerKeyRotationPreservesIdentityAndState(t *testing.T) {
 
 func TestLANRotationKeepsOlderMagpieWorking(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if err := settings.Save(settings.Settings{LANKey: Prefix + "fixture-legacy"}); err != nil {
-		t.Fatal(err)
-	}
 	if err := ConfigureLAN(true, false); err != nil {
 		t.Fatal(err)
 	}

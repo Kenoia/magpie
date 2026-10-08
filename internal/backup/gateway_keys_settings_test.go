@@ -15,7 +15,7 @@ import (
 func TestCollectSettingsKeysCompatibility(t *testing.T) {
 	home(t)
 	appdir.UseExecutable("")
-	if err := shareLegacyGateway(t); err != nil {
+	if err := access.ConfigureLAN(true, false); err != nil {
 		t.Fatal(err)
 	}
 	for _, keys := range []bool{false, true} {
@@ -61,7 +61,7 @@ func TestRestoreSettingsKeysScope(t *testing.T) {
 			appdir.UseExecutable("")
 			provider.ForgetAccounts()
 			t.Cleanup(provider.ForgetAccounts)
-			if err := shareLegacyGateway(t); err != nil {
+			if err := access.ConfigureLAN(true, false); err != nil {
 				t.Fatal(err)
 			}
 			cur := settings.Load()
@@ -132,7 +132,7 @@ func TestRestoreSettingsKeysStore(t *testing.T) {
 		t.Run(store, func(t *testing.T) {
 			home(t)
 			appdir.UseExecutable("")
-			if err := shareLegacyGateway(t); err != nil {
+			if err := access.ConfigureLAN(true, false); err != nil {
 				t.Fatal(err)
 			}
 			cur := settings.Load()

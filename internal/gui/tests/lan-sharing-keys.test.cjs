@@ -15,52 +15,45 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.setDefaultTimeout(6000);
       const events = [], errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
-      await page.route("**/*", fixture(lang, "light", events, { keys: [] }));
+      await page.route("**/*", fixture(lang, "light", events, { keys: [], lanKeyError: "fixture: no usable credentials" }));
       await page.goto("http://magpie.test/?view=settings&tab=network");
-      await page.locator("#lanList .segs").waitFor();
+      await page.locator("#lanList > .row:first-child .segs").waitFor();
       const words = await page.evaluate((error) => ({ on: t("On"), off: t("Off"), keys: t("Gateway keys"),
         name: t("Gateway key name"), create: t("Create"), disable: t("Disable key"), error: t(error) }), error);
       const sharing = async (on) => {
-        const before = await page.locator("#lanList .segs .on").textContent();
+        const before = await page.locator("#lanList > .row:first-child .segs .on").textContent();
         const pending = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/settings/lan");
-        await page.locator("#lanList").getByRole("button", { name: on ? words.on : words.off, exact: true }).click();
+        await page.locator("#lanList > .row:first-child").getByRole("button", { name: on ? words.on : words.off, exact: true }).click();
         const reply = await pending;
         const selected = reply.status() === 200 ? (on ? words.on : words.off) : before;
         await page.waitForFunction((selected) => prefsBusy === 0 &&
-          document.querySelector("#lanList .segs .on")?.textContent === selected, selected);
+          document.querySelector("#lanList > .row:first-child .segs .on")?.textContent === selected, selected);
         return reply;
       };
       const network = async () => {
         await page.locator("#prefs").click();
+        await page.mouse.move(300, 400);
+        await page.mouse.wheel(0, -5000);
         await page.locator("#setTab-network").click();
-        await page.locator("#lanList .segs").waitFor();
+        await page.locator("#lanList > .row:first-child .segs").waitFor();
       };
       assert.equal((await sharing(false)).status(), 200);
       assert.equal(await page.locator("#lanList .lan-address-row").count(), 0);
-      assert.equal(await page.locator("#lanList .segs .on").textContent(), words.off);
+      assert.equal(await page.locator("#lanList > .row:first-child .segs .on").textContent(), words.off);
       const keys = page.locator("#lanList").getByRole("button", { name: words.keys, exact: true });
-      await keys.click();
-      await page.locator("#gatewayKeysBlock").waitFor({ state: "visible" });
-      const empty = page.locator("#gatewayKeys .empty-state");
-      await empty.waitFor();
-      const shape = await empty.evaluate((node) => {
-        const css = getComputedStyle(node);
-        const probe = document.createElement("span");
-        probe.style.color = "var(--muted)";
-        node.append(probe);
-        const muted = css.color === getComputedStyle(probe).color;
-        probe.remove();
-        return { padding: parseFloat(css.paddingTop), centered: css.textAlign === "center", muted };
-      });
-      assert.ok(shape.padding >= 20, "the empty key list has the app's padded empty-state spacing");
-      assert.equal(shape.centered, true);
-      assert.equal(shape.muted, true, "the empty key list uses the app's muted text token");
+      assert.equal(await keys.count(), 0, "key management is not offered while sharing is off");
+      const gateway = async () => {
+        const pending = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/providers");
+        await page.locator('#nav button[data-view="gateway"]').click();
+        await pending;
+        await page.waitForFunction(() => providers && document.querySelector("#gatewayKeysBlock").hidden === !providers.gateway.lan);
+      };
+      await gateway();
+      await page.locator("#view-gateway").waitFor({ state: "visible" });
+      assert.equal(await page.locator("#gatewayKeysBlock").isVisible(), false);
       await page.setViewportSize({ width: 440, height: 600 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-      if (process.env.ARTIFACT_DIR) {
-        await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
-        await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-empty-gateway-keys.png`) });
-      }
+      await page.setViewportSize({ width: 560, height: 740 });
       await network();
       assert.equal((await sharing(true)).status(), 200);
       await page.locator("#lanList .lan-address-row").waitFor();
@@ -90,34 +83,66 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       if (process.env.ARTIFACT_DIR) {
         await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-sharing-needs-key.png`) });
       }
-      await keys.click();
-      await page.locator('#gatewayKeys .acc.off[data-key="lan-key-1"]').waitFor();
-      assert.equal(await page.locator("#gatewayKeys .acc[data-key]").count(), 1);
-      assert.equal(events.filter((e) => e.action === "add-key").length, 0, "sharing does not add another key when the existing key is disabled");
-      assert.equal(events.filter((e) => ["on-key", "rotate-key"].includes(e.action)).length, 0);
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-      await network();
       const failure = "fixture: gateway settings could not be saved";
-      await page.route("**/api/settings/lan", (route) => route.fulfill({ status: 503, json: { error: failure } }));
-      assert.equal((await sharing(true)).status(), 503);
+      let release, started;
+      const held = new Promise((resolve) => { release = resolve; });
+      const requested = new Promise((resolve) => { started = resolve; });
+      await page.route("**/api/settings/lan", async (route) => {
+        started();
+        await held;
+        await route.fulfill({ status: 503, json: { error: failure } });
+      });
+      const retry = sharing(true);
+      await requested;
+      assert.equal(await page.locator("#lanList > .row:first-child .segs .on").textContent(), words.on, "clearing guidance does not redraw away the pending selection");
+      assert.equal(await page.locator("#lanList [role=alert]").count(), 0, "a new attempt clears the previous error before the reply");
+      release();
+      assert.equal((await retry).status(), 503);
       await page.waitForFunction((failure) => document.querySelector("#status.err")?.textContent === failure, failure);
       assert.equal(await page.locator("#lanList [role=alert]").count(), 0, "other request failures keep their original error feedback");
-      assert.equal(await page.locator("#lanList .segs .on").textContent(), words.off);
+      assert.equal(await page.locator("#lanList > .row:first-child .segs .on").textContent(), words.off);
       await page.unroute("**/api/settings/lan");
-      await keys.click();
-      await page.locator("#addGatewayKey").click();
-      await page.getByRole("textbox", { name: words.name, exact: true }).fill("Remote laptop");
-      await page.getByRole("button", { name: words.create, exact: true }).click();
-      await page.locator('#gatewayKeys .acc[data-key="new-key-2"]').waitFor();
+      assert.equal((await sharing(true)).status(), 400);
+      await page.locator("#lanList [role=alert]").waitFor();
+      assert.equal(await keys.count(), 0);
+      await gateway();
+      assert.equal(await page.locator("#gatewayKeysBlock").isVisible(), false);
+      assert.equal(events.filter((e) => e.action === "add-key").length, 0, "sharing does not add another key when the existing key is disabled");
+      assert.equal(events.filter((e) => ["on-key", "rotate-key"].includes(e.action)).length, 0);
       await network();
+      assert.equal(await page.locator("#lanList [role=alert]").count(), 0, "a fresh settings read clears stale guidance");
+      // A key enabled outside this page is picked up when sharing is retried.
+      await page.evaluate(() => fetch("/api/caller-keys/on-key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "lan-key-1" }) }));
       assert.equal((await sharing(true)).status(), 200);
       assert.equal(await page.locator("#lanList [role=alert]").count(), 0);
       await keys.click();
-      await page.locator('#gatewayKeys .acc.off[data-key="lan-key-1"]').waitFor();
-      assert.equal(await page.locator("#gatewayKeys .acc[data-key]").count(), 2);
-      assert.equal(events.filter((e) => e.action === "add-key").length, 1, "only Create adds the second key");
-      assert.equal(events.filter((e) => ["on-key", "rotate-key"].includes(e.action)).length, 0);
+      await page.locator('#gatewayKeys .acc.in-use[data-key="lan-key-1"]').waitFor();
+      assert.equal(await page.locator("#gatewayKeys .acc[data-key]").count(), 1);
+      assert.equal(events.filter((e) => e.action === "add-key").length, 0);
+      assert.equal(events.filter((e) => e.action === "rotate-key").length, 0);
       assert.deepEqual(errors, []);
+    });
+    test(`${engine} ${lang}: an empty shared gateway uses the app's empty state`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const page = await (await browser.newContext({ viewport: { width: 440, height: 600 }, reducedMotion: "reduce" })).newPage();
+      await page.route("**/*", fixture(lang, "light", [], { keys: [], lan: true }));
+      await page.goto("http://magpie.test/?view=gateway");
+      const empty = page.locator("#gatewayKeys .empty-state");
+      await empty.waitFor();
+      const shape = await empty.evaluate((node) => {
+        const css = getComputedStyle(node);
+        const probe = document.createElement("span");
+        probe.style.color = "var(--muted)";
+        node.append(probe);
+        const muted = css.color === getComputedStyle(probe).color;
+        probe.remove();
+        return { padding: parseFloat(css.paddingTop), centered: css.textAlign === "center", muted };
+      });
+      assert.ok(shape.padding >= 20);
+      assert.equal(shape.centered, true);
+      assert.equal(shape.muted, true);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     });
   }
 }

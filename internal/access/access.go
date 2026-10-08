@@ -184,9 +184,9 @@ func List() ([]Key, error) {
 	return keys, nil
 }
 
-// LANSecret gives an agent beyond loopback an enabled gateway key while
-// sharing is on. Prefer the migrated LAN key, then an existing named key;
-// selecting one never changes credentials or their migration markers.
+// LANSecret gives an agent beyond loopback the enabled LAN key while
+// sharing is on. Other caller keys belong to their clients, not magpie.
+// Reading it never changes credentials or their migration markers.
 func LANSecret() string {
 	mu.Lock()
 	defer mu.Unlock()
@@ -199,9 +199,6 @@ func LANSecret() string {
 		return ""
 	}
 	if i := slices.IndexFunc(keys, func(k Key) bool { return (k.ID == s.LANKeyID || k.LAN) && !k.Off && k.Secret != "" }); i >= 0 {
-		return keys[i].Secret
-	}
-	if i := slices.IndexFunc(keys, func(k Key) bool { return !k.Off && k.Secret != "" }); i >= 0 {
 		return keys[i].Secret
 	}
 	if s.LANKeyID == "" && s.LANKey != "" && !strings.HasPrefix(s.LANKey, revokedLANPrefix) && !slices.ContainsFunc(keys, func(k Key) bool {
@@ -442,6 +439,9 @@ func migrateLegacyLANKey() error {
 	return settings.Save(s)
 }
 
+// ErrLANKeyRequired means existing gateway keys are all disabled or empty.
+var ErrLANKeyRequired = errors.New("Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network")
+
 // ConfigureLAN changes remote access, creating the default key only when
 // the store is empty. The second argument is retained for older callers;
 // rotation belongs to Update("rotate-key"), not the sharing switch.
@@ -474,7 +474,7 @@ func ConfigureLAN(on, _ bool) error {
 				return err
 			}
 		} else if !slices.ContainsFunc(keys, func(k Key) bool { return !k.Off && k.Secret != "" }) {
-			return errors.New("Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network")
+			return ErrLANKeyRequired
 		}
 	}
 	s.LAN = on

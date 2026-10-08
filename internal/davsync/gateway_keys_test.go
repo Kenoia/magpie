@@ -75,7 +75,7 @@ func TestGatewayKeysSync(t *testing.T) {
 			use(a)
 			setTheme("dark")
 			if !tc.lastKey {
-				if err := shareLegacyGateway(t); err != nil {
+				if err := access.ConfigureLAN(true, false); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -199,19 +199,4 @@ func TestGatewayKeysSync(t *testing.T) {
 			}
 		})
 	}
-}
-
-// A legacy sharing fixture is created explicitly; the switch issues no key.
-func shareLegacyGateway(t *testing.T) error {
-	t.Helper()
-	secret, err := access.Update("add-key", access.Change{Name: "Magpie"})
-	if err != nil {
-		return err
-	}
-	s := settings.Load()
-	s.LANKey = secret
-	if err := settings.Save(s); err != nil {
-		return err
-	}
-	return access.ConfigureLAN(true, false)
 }

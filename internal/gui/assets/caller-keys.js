@@ -152,7 +152,7 @@ function copyCallerKeyBtn(k) {
 
 function renderGatewayKeys() {
   const box = $("#gatewayKeys");
-  $("#gatewayKeysBlock").hidden = false;
+  $("#gatewayKeysBlock").hidden = !providers?.gateway.lan;
   box.replaceChildren();
   $("#addGatewayKey").onclick = () => { gatewayKeyDraft = ""; renderGatewayKeys(); };
   if (gatewayKeys === null) return;
