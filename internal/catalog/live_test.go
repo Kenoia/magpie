@@ -174,6 +174,10 @@ func TestFetchNamePrecedence(t *testing.T) {
 		  {"id":"display","magpie_label":"","display_name":"display name","name":"name"},
 		  {"id":"name","display_name":"","name":"provider name"},
 		  {"id":"id","name":""},
+		  {"id":"prefixed","name":"Vendor: Model"},
+		  {"id":"prefixed-display","display_name":"Vendor: Display","name":"Vendor: Name"},
+		  {"id":"prefixed-label","magpie_label":"Vendor: Label","name":"Vendor: Name"},
+		  {"id":"variant","name":"Model:free"},
 		  {"name":"name-only"},
 		  {"display_name":"no identifier"},
 		  {}]}`))
@@ -187,8 +191,43 @@ func TestFetchNamePrecedence(t *testing.T) {
 	for _, m := range ms {
 		got = append(got, m.ID+"|"+m.Name)
 	}
-	want := "all|label\ndisplay|display name\nname|provider name\nid|id\nname-only|name-only"
+	want := "all|label\ndisplay|display name\nname|provider name\nid|id\nprefixed|prefixed\nprefixed-display|Vendor: Display\nprefixed-label|Vendor: Label\nvariant|Model:free\nname-only|name-only"
 	if strings.Join(got, "\n") != want {
 		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), want)
+	}
+}
+
+// OpenRouter's real /api/v1/models shape has vendor-prefixed names and no
+// display_name. Those names still come from its catalog, without the prefix.
+func TestFetchOpenRouterNames(t *testing.T) {
+	writeCatalog(t, `{"openrouter":{"models":{
+	  "anthropic/claude-haiku-5.5":{"id":"anthropic/claude-haiku-5.5","name":"Claude Haiku 5.5"},
+	  "google/gemini-nano-banana-2.1":{"id":"google/gemini-nano-banana-2.1","name":"Nano Banana 2.1"}
+	}}}`)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Fields from https://openrouter.ai/api/v1/models, 2026-10-08.
+		w.Write([]byte(`{"data":[
+		  {"id":"anthropic/claude-haiku-5.5","canonical_slug":"anthropic/claude-haiku-5.5-20261007","name":"Anthropic: Claude Haiku 5.5","created":1791397883,"context_length":1000000,"architecture":{"modality":"text+image+file->text","input_modalities":["text","image","file"],"output_modalities":["text"],"tokenizer":"Claude","instruct_type":null},"top_provider":{"context_length":1000000,"max_completion_tokens":128000,"is_moderated":true}},
+		  {"id":"google/gemini-nano-banana-2.1","canonical_slug":"google/gemini-nano-banana-2.1-20261006","name":"Google: Nano Banana 2.1","created":1791300825,"context_length":65536,"architecture":{"modality":"text+image->text+image","input_modalities":["image","text"],"output_modalities":["image","text"],"tokenizer":"Gemini","instruct_type":null},"top_provider":{"context_length":65536,"max_completion_tokens":58982,"is_moderated":false}}]}`))
+	}))
+	defer srv.Close()
+	ms, err := Fetch(context.Background(), srv.URL+"/api/v1", "", false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ms) != 2 {
+		t.Fatalf("models: %+v", ms)
+	}
+	for _, m := range ms {
+		if m.Name != m.ID {
+			t.Errorf("prefixed name kept for %q: %q", m.ID, m.Name)
+		}
+	}
+	wantNames := []string{"Claude Haiku 5.5", "Nano Banana 2.1"}
+	wantContexts := []int{1000000, 65536}
+	for i, m := range Named(Decorate(ms, Provider("openrouter"))) {
+		if m.ID != ms[i].ID || m.Name != wantNames[i] || m.Context != wantContexts[i] {
+			t.Errorf("model %d: %+v; want id %q, name %q, context %d", i, m, ms[i].ID, wantNames[i], wantContexts[i])
+		}
 	}
 }

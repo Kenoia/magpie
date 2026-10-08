@@ -294,7 +294,9 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 			continue
 		}
 		name := r.DisplayName
-		if name == "" {
+		// OpenRouter's "Anthropic: Claude …" is a vendor-prefixed name;
+		// leave it to the catalog rather than changing every display name.
+		if name == "" && !strings.Contains(r.Name, ": ") {
 			name = r.Name
 		}
 		if r.Label != "" {

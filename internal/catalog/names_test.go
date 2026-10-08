@@ -39,6 +39,8 @@ func TestNameOf(t *testing.T) {
 	for _, m := range Named(in) {
 		got = append(got, m.ID+"|"+m.Name)
 	}
+	// These exact ids differ, so the shared name would hide that distinction.
+	// NameOf still matches either case; Named keeps each id in this list.
 	want := "glm-5-turbo|glm-5-turbo\nGLM-5-Turbo|GLM-5-Turbo\nglm-5-turbo|Turbo\nplain|plain"
 	if strings.Join(got, "\n") != want {
 		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), want)
