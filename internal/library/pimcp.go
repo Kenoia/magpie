@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -129,22 +130,33 @@ func piDetect(d string) piPlugins {
 		var o struct {
 			Source     string
 			Extensions []string
+			Autoload   *bool
 		}
 		if json.Unmarshal(r, &s) != nil && json.Unmarshal(r, &o) == nil {
-			// Pi's empty resource filter explicitly loads no extensions.
-			if o.Extensions != nil && len(o.Extensions) == 0 {
+			// With autoload off, Pi only loads explicit extension patterns.
+			if len(o.Extensions) == 0 && (o.Extensions != nil || o.Autoload != nil && !*o.Autoload) {
 				continue
 			}
 			s = o.Source
 		}
 		specs = append(specs, s)
 	}
-	specs = append(specs, settings.Extensions...)
 	for _, e := range settings.Extensions {
-		if strings.TrimSpace(e) == "-builtin:mcp" {
-			p.noBuiltin = true
+		// Pi separates override/glob patterns from extension sources.
+		if e == "" || strings.ContainsAny(e[:1], "!+-") || strings.ContainsAny(e, "*?") {
+			continue
+		}
+		dir := e
+		if strings.HasPrefix(dir, "~/") {
+			dir = filepath.Join(home(), dir[2:])
+		} else if !filepath.IsAbs(dir) {
+			dir = filepath.Join(d, dir)
+		}
+		if piExtensionIn(dir, "", d, settings.Extensions) {
+			specs = append(specs, dir)
 		}
 	}
+	p.noBuiltin = !piExtensionEnabled("builtin:mcp", d, settings.Extensions)
 	version := func(dir string) string {
 		var pkg struct{ Name, Version string }
 		b, _ := os.ReadFile(filepath.Join(dir, "package.json"))
@@ -173,11 +185,11 @@ func piDetect(d string) piPlugins {
 	}
 	// Pi discovers extension entry points in extensions/, not npm/git
 	// package storage (package-manager.ts, addAutoDiscoveredResources).
-	if piExtensionIn(filepath.Join(d, "extensions", "pi-mcp-extension"), "pi-mcp-extension") {
+	if piExtensionIn(filepath.Join(d, "extensions", "pi-mcp-extension"), "pi-mcp-extension", d, settings.Extensions) {
 		p.ext = true
 	}
 	auto := filepath.Join(d, "extensions", "pi-mcp-adapter")
-	if piExtensionIn(auto, "pi-mcp-adapter") {
+	if piExtensionIn(auto, "pi-mcp-adapter", d, settings.Extensions) {
 		p.adapter = true
 		dirs = append(dirs, auto)
 	}
@@ -204,24 +216,90 @@ func piDetect(d string) piPlugins {
 	return p
 }
 
-// piExtensionIn recognizes a known package Pi discovers in extensions/:
-// an existing pi.extensions entry, or index.ts/js. A package.json alone
-// isn't an entry point (package-manager.ts, resolveExtensionEntries).
-func piExtensionIn(dir, name string) bool {
+// piExtensionIn recognizes enabled entry points in a known extension folder.
+// Overrides apply to the resolved entries, not their containing package.
+func piExtensionIn(dir, name, base string, overrides []string) bool {
 	var pkg struct {
 		Name string
 		Pi   struct{ Extensions []string }
 	}
 	raw, _ := os.ReadFile(filepath.Join(dir, "package.json"))
-	if json.Unmarshal(raw, &pkg) != nil || pkg.Name != name {
+	err := json.Unmarshal(raw, &pkg)
+	if name != "" && (err != nil || pkg.Name != name) {
 		return false
 	}
+	var entries []string
 	for _, e := range pkg.Pi.Extensions {
-		if exists(filepath.Join(dir, e)) {
-			return true
+		if f := filepath.Join(dir, e); exists(f) {
+			entries = append(entries, f)
 		}
 	}
-	return exists(filepath.Join(dir, "index.ts")) || exists(filepath.Join(dir, "index.js"))
+	// Pi falls back only when no manifest entry exists, not when disabled.
+	if len(entries) == 0 {
+		for _, e := range []string{"index.ts", "index.js"} {
+			if f := filepath.Join(dir, e); exists(f) {
+				entries = append(entries, f)
+				break
+			}
+		}
+	}
+	return slices.ContainsFunc(entries, func(f string) bool { return piExtensionEnabled(f, base, overrides) })
+}
+
+// Pi's isEnabledByOverrides applies ! globs, then + exact paths, then -
+// exact paths, regardless of their order. A + never discovers a new source.
+func piExtensionEnabled(file, base string, overrides []string) bool {
+	rel, err := filepath.Rel(base, file)
+	if err != nil {
+		rel = file
+	}
+	file, rel = filepath.ToSlash(file), filepath.ToSlash(rel)
+	enabled := true
+	for _, prefix := range []byte{'!', '+', '-'} {
+		for _, p := range overrides {
+			if len(p) < 2 || p[0] != prefix {
+				continue
+			}
+			p = filepath.ToSlash(p[1:])
+			if prefix == '!' {
+				if piExtensionGlob(p, rel) || piExtensionGlob(p, pathpkg.Base(file)) || piExtensionGlob(p, file) {
+					enabled = false
+				}
+			} else if p = strings.TrimPrefix(strings.TrimPrefix(p, "./"), `.\`); p == rel || p == file {
+				enabled = prefix == '+'
+			}
+		}
+	}
+	return enabled
+}
+
+// Match slash-separated extension globs, including Pi's recursive **.
+func piExtensionGlob(pattern, file string) bool {
+	p, rest, more := strings.Cut(pattern, "/")
+	f, tail, nested := strings.Cut(file, "/")
+	if p == "**" {
+		if more && piExtensionGlob(rest, file) || !more && file == "" {
+			return true
+		}
+		if strings.HasPrefix(f, ".") {
+			return false
+		}
+		return !more && !nested || nested && piExtensionGlob(pattern, tail)
+	}
+	if strings.HasPrefix(f, ".") && !strings.HasPrefix(p, ".") {
+		return false
+	}
+	// minimatch negates a character class with !; path.Match uses ^.
+	for i := 0; i+1 < len(p); i++ {
+		if p[i] == '\\' {
+			i++
+		} else if p[i] == '[' && p[i+1] == '!' {
+			p = p[:i+1] + "^" + p[i+2:]
+			i++
+		}
+	}
+	match, _ := pathpkg.Match(p, f)
+	return match && (more && nested && piExtensionGlob(rest, tail) || !more && !nested)
 }
 
 // piMCP is the file Pi's MCP servers go in, and the extension Pi reads them
